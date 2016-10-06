@@ -132,11 +132,11 @@ public class japsaJson {
 		checkPath(inputDir);
 		checkPath(outputDir);
 		
-		// By this stage only the existing input directory should be monitored
-		new japsaJson(inputDir, outputDir).processEvents();
 		// Output the absolute path instead of the relative path
 		System.out.format("Monitoring directory: %s%n", inputDir.toAbsolutePath().toString());
 		System.out.format("Output directory: %s%n", outputDir.toAbsolutePath().toString());
+		// By this stage only the existing input directory should be monitored
+		new japsaJson(inputDir, outputDir).processEvents();
 	}
 	
 	public static void checkPath(Path dir) {
