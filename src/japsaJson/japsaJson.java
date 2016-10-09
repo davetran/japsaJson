@@ -15,8 +15,8 @@ import com.google.gson.GsonBuilder;
 
 /**
  * @author David Tran
- * @version 1.00
- * @since 06-OCT-2016
+ * @version 1.01
+ * @since 09-OCT-2016
  * 
  */
 public class japsaJson {
@@ -75,10 +75,13 @@ public class japsaJson {
                 // modification of a file matching the pattern *.out.fasta.
                 if ((kind == ENTRY_CREATE || kind == ENTRY_MODIFY)
                 		&& inputPath.toString().endsWith(".fin.japsa")) {
-                	System.out.println("Modified");
+                	System.out.println("Japsa Modified");
                 	
                 	try {
-                		Thread.sleep(500);
+                		// Try putting the thread to sleep to prevent the watcher
+                		// from triggering multiple times in the event of a combined
+                		// Create and modify event.
+                		Thread.sleep(1500);
                 		System.out.println("Sleeping");
                 	}
                 	catch (InterruptedException InterruptE) {
@@ -174,7 +177,7 @@ public class japsaJson {
 			/* Process the stream by filtering out the header lines
 			 * and storing each line into a list 
 			 */
-			scaffoldList = lines.filter(s -> s.startsWith("#JSA"))
+			scaffoldList = lines.filter(s -> s.startsWith(">") && !s.startsWith(">>"))
             	.collect(Collectors.toList());
 		}
 		catch (IOException e) {
@@ -185,52 +188,99 @@ public class japsaJson {
 		/* Identify the size of the list */
 		System.out.println("Size: " + scaffoldList.size());
 		
-		int scaffoldStartIndex = 0;
-		int scaffoldEndIndex = 0;
-		int lengthEndIndex = 0;
+		
+		int scaffoldTotal = scaffoldList.size();
+		
+		int scaffoldType = 0; // Linear = 0, Circular = 0;
+		
+		int sequenceLength = 0;
+		String nextSequence = new String("");
+		String currentSequence = new String("");
 		
 		//JsonArrayBuilder test2 = Json.createArrayBuilder();
 		List<Map<String, Object>> listMap = new ArrayList<Map<String, Object>>();
 		List<Map<String, Object>> nodeMap = new ArrayList<Map<String, Object>>();
+		List<Map<String, Object>> linkMap = new ArrayList<Map<String, Object>>();
 		
 		// TODO: Clean up this block of code
+		
 		for(String s: scaffoldList) {
+			System.out.format("%s%n",s);
+		}
+		
+		//for(String s: scaffoldList) {
+		for(int i = 0; i< scaffoldTotal; i++) {
 			Map<String, Object> m = new HashMap<String, Object>();
 			Map<String, Object> nm = new HashMap<String, Object>();
 			Map<String, Object> nm2 = new HashMap<String, Object>();
-			System.out.format("%s%n",s);
-			scaffoldStartIndex = s.indexOf("Scaffold");
-			scaffoldEndIndex = s.indexOf(":", scaffoldStartIndex);
-			System.out.format("%s%n",s.substring(scaffoldStartIndex, scaffoldEndIndex));
-			lengthEndIndex = s.indexOf(":", scaffoldEndIndex + 1);
-			System.out.format("%s%n",s.substring(scaffoldEndIndex + 1, lengthEndIndex));
-			m.put("source", s.substring(scaffoldStartIndex, scaffoldEndIndex));
-			m.put("target", s.substring(scaffoldStartIndex, scaffoldEndIndex) + "'");
-			nm.put("id", s.substring(scaffoldStartIndex, scaffoldEndIndex));
-			nm2.put("id", s.substring(scaffoldStartIndex, scaffoldEndIndex) + "'");
-			int l =0;
-			try {
-				l = Integer.valueOf(s.substring(scaffoldEndIndex + 1, lengthEndIndex));
-			} catch (NumberFormatException e) {
-				l = 0;	// Edge of length zero should not exist.
+			Map<String, Object> lm = new HashMap<String, Object>();
+			
+			String s = scaffoldList.get(i);
+			if(s.indexOf(">A:") != 0) {
+				if(s.indexOf("Linear") != -1) {
+					scaffoldType = 0;
+				}
+				if(s.indexOf("Circular") != -1) {
+					scaffoldType = 1;
+				}	
 			}
-			m.put("length", l);
-			listMap.add(m);
-			nodeMap.add(nm);
-			nodeMap.add(nm2);
-		}
+
+			if(s.contains(">A") == false) {
+				//System.out.println(s);
+				currentSequence = getSequenceName(s);
+				//System.out.println(currentSequence);
+				
+				// Add to the node list
+				nm.put("id", currentSequence);
+				nm2.put("id", currentSequence + "'");
+				
+				nodeMap.add(nm);
+				nodeMap.add(nm2);
+				
+				// Parse and add the contig data
+				sequenceLength = getLength(s);
+				//System.out.println(sequenceLength);
+				
+				m.put("source", currentSequence);
+				m.put("target", currentSequence + "'");
+				m.put("length", sequenceLength);
+				
+				listMap.add(m);
+				
+				/*
+				 * ContigLinks code
+				 * Sequence orientation is not implemented. Will assume a forward to forward
+				 * adjacency.
+				 * 
+				 * TODO: Build the proper adjacencies based on sequence orientation
+				 */
+				if (i < (scaffoldTotal - 1)) {
+					nextSequence = scaffoldList.get(i + 1);
+					if(nextSequence.contains(">A") == false) {
+						//System.out.println("NExt seq: " + getSequenceName(nextSequence));
+						lm.put("source", getSequenceName(s));
+						lm.put("target", getSequenceName(nextSequence) + "'");
+						//System.out.println(lm.toString());
+						linkMap.add(lm);	// Add new entry for Json
+					}
+					else {
+						//System.out.println(nextSequence); // Expect >A sequence
+					}
+				} // END Contiglinks code
+			} // END of sequence processing
+		} // END of Parse function
 		
-		for(Map<String, Object> m : listMap) {
-			System.out.println(m.toString());
-		};
+		// Parsing completed, now all that is left is to build the final
+		// JSON object and write the JSON output
 		Map<String, Object> n = new HashMap<String, Object>();
 		n.put("contigData", listMap);
 		n.put("nodes", nodeMap);
+		n.put("contigLinks", linkMap);
 		
 		Gson gson = new GsonBuilder().disableHtmlEscaping().create();
 		
 		//try (FileWriter f = new FileWriter("/home/dave/Test/assembly.json")) {
-		try (FileWriter f = new FileWriter(outputDir.toString() + "/assembly2.json")) {
+		try (FileWriter f = new FileWriter(outputDir.toString() + "/assembly.json")) {
 
 			gson.toJson(n, f);
 		}
@@ -239,4 +289,66 @@ public class japsaJson {
 		}
 
 	} //End parse function.
+	
+	public String getSequenceName(String s){
+		int nodeStartIndex = 0;
+		int nodeEndIndex = 0;
+		
+		if(s.contains("NODE")) {	//Process the NODES
+			nodeStartIndex = s.indexOf("NODE");
+			nodeEndIndex = s.indexOf("_length");
+			//System.out.format("Node: %s%n",s);
+			s = s.substring(nodeStartIndex, nodeEndIndex);
+			//System.out.format("%s%n: ", s);
+		}
+		// Process the (transient?) nanopore read data
+		else if (s.contains("_channel")){
+			nodeEndIndex = s.indexOf("_channel");
+			//System.out.format("Other node: %s%n", s);
+			s = s.substring(1, nodeEndIndex);
+			//System.out.format("Node: %s%n",s);
+		}
+		return s;
+	}
+	
+	public int getLength(String s) {
+		int lengthStartIndex = 0;
+		int lengthDelimitIndex = 0;
+		int lengthEndIndex = 0;
+		int length = 0;
+		
+		if(s.contains("NODE")) {	//Process the NODES
+			// Process length
+			lengthStartIndex = s.indexOf("_length");
+			lengthEndIndex = s.indexOf("_cov");
+			length = stringToInteger(s.substring(lengthStartIndex + 8, lengthEndIndex));
+			//System.out.format("Length: %d%n", length);
+		}
+		else if (s.contains("_channel")){
+			lengthStartIndex = s.indexOf("(");
+			lengthDelimitIndex = s.indexOf(",");
+			lengthEndIndex = s.indexOf(")");
+			//System.out.println("Begin: " + s.substring(lengthStartIndex + 1, lengthDelimitIndex));
+			//System.out.println("End: " + s.substring(lengthDelimitIndex + 1, lengthEndIndex));
+			length = stringToInteger(s.substring(lengthDelimitIndex + 1, lengthEndIndex)) -
+					stringToInteger(s.substring(lengthStartIndex + 1, lengthDelimitIndex));
+		}
+		return length;
+	}
+	
+	/**
+	 *  Helper for getLength()
+	 * @param s
+	 * @return
+	 */
+	public int stringToInteger(String s) {
+		int l = 0;
+		try {
+			l = Integer.valueOf(s);
+		} 
+		catch (NumberFormatException e) {
+			l = 100;	// Edge of length zero should not exist.
+		}
+		return l;
+	}
 }
