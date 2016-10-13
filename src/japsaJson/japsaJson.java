@@ -186,42 +186,44 @@ public class japsaJson {
 		}
 		
 		/* Identify the size of the list */
-		System.out.println("Size: " + scaffoldList.size());
-		
-		
 		int scaffoldTotal = scaffoldList.size();
+		System.out.println("Size: " + scaffoldTotal);
 		
 		int scaffoldType = 0; // Linear = 0, Circular = 0;
 		
 		int sequenceLength = 0;
+		int circularStart = 0;
 		String nextSequence = new String("");
 		String currentSequence = new String("");
 		
-		//JsonArrayBuilder test2 = Json.createArrayBuilder();
 		List<Map<String, Object>> listMap = new ArrayList<Map<String, Object>>();
 		List<Map<String, Object>> nodeMap = new ArrayList<Map<String, Object>>();
 		List<Map<String, Object>> linkMap = new ArrayList<Map<String, Object>>();
 		
 		// TODO: Clean up this block of code
 		
+		// Debug
 		for(String s: scaffoldList) {
 			System.out.format("%s%n",s);
 		}
 		
-		//for(String s: scaffoldList) {
+		// Use a normal for loop to take advantage of the index variable.
 		for(int i = 0; i< scaffoldTotal; i++) {
 			Map<String, Object> m = new HashMap<String, Object>();
-			Map<String, Object> nm = new HashMap<String, Object>();
-			Map<String, Object> nm2 = new HashMap<String, Object>();
+			Map<String, Object> nm = new HashMap<String, Object>();  //3' node id
+			Map<String, Object> nm2 = new HashMap<String, Object>(); //5' node id
 			Map<String, Object> lm = new HashMap<String, Object>();
 			
 			String s = scaffoldList.get(i);
+			
+			// State-machine for linear or circular scaffolds.
 			if(s.indexOf(">A:") != 0) {
 				if(s.indexOf("Linear") != -1) {
 					scaffoldType = 0;
 				}
 				if(s.indexOf("Circular") != -1) {
 					scaffoldType = 1;
+					circularStart = i + 1;	// Sequence index for the start of the circular scarf
 				}	
 			}
 
@@ -258,13 +260,19 @@ public class japsaJson {
 					nextSequence = scaffoldList.get(i + 1);
 					if(nextSequence.contains(">A") == false) {
 						//System.out.println("NExt seq: " + getSequenceName(nextSequence));
-						lm.put("source", getSequenceName(s));
-						lm.put("target", getSequenceName(nextSequence) + "'");
+						//lm.put("source", getSequenceName(s));
+						//lm.put("target", getSequenceName(nextSequence) + "'");
 						//System.out.println(lm.toString());
+						lm = buildLinkMap(s, nextSequence);
 						linkMap.add(lm);	// Add new entry for Json
 					}
 					else {
-						//System.out.println(nextSequence); // Expect >A sequence
+						// If the scaffold type is circular, connect the last sequence
+			            // to the first.
+						if(scaffoldType == 1) {
+							lm = buildLinkMap(s, scaffoldList.get(circularStart));
+							linkMap.add(lm);	// Add new entry for Json
+						}
 					}
 				} // END Contiglinks code
 			} // END of sequence processing
@@ -277,6 +285,7 @@ public class japsaJson {
 		n.put("nodes", nodeMap);
 		n.put("contigLinks", linkMap);
 		
+		// Escape certain characters
 		Gson gson = new GsonBuilder().disableHtmlEscaping().create();
 		
 		//try (FileWriter f = new FileWriter("/home/dave/Test/assembly.json")) {
@@ -350,5 +359,52 @@ public class japsaJson {
 			l = 100;	// Edge of length zero should not exist.
 		}
 		return l;
+	}
+	
+	/**
+	 *
+	 * 
+	 * Build the ContigLinks array that will store the adjacent sequences.
+	 * There are 4-possible combinations for contig links:
+	 * 		Case 1:	>EDGE_A:EDGE_B;
+	 * 				5'===>3'----5'===>3' 
+	 * 				Specifies the EDGE_A 3' to EDGE_B 5' link
+	 * 		Case 2:	>EDGE_A:EDGE_B';
+	 * 				5'===>3'----3'<===5' 
+	 * 				Specifies the EDGE_A 3' to EDGE_B 3' link
+	 * 		Case 3:	>EDGE_A':EDGE_B;
+	 * 				3'<===5'----5'===>3' 
+	 * 				Specifies the EDGE_A 5' to EDGE_B 5' link
+	 *  	Case 4:	>EDGE_A':EDGE_B';
+	 * 				3'<===5'----3'<===5' 
+	 * 				Specifies the EDGE_A 3' to EDGE_B 5' link
+	 * 
+	 * Internal contig representation:
+	 * 		Node_X'               Node_X
+	 * 		Prime end             Not prime
+	 *      5'                    3'
+	 *      o-------------------->o
+	 * @param currentSequence
+	 * @param nextSequence
+	 * @return
+	 */
+	public Map<String, Object> buildLinkMap(String currentSequence, String nextSequence) {
+		Map<String, Object> m = new HashMap<String, Object>();
+		// Check the source string
+		if(currentSequence.contains("+(") || currentSequence.contains("+[")) {
+			m.put("source", getSequenceName(currentSequence));
+		}
+		else if ((currentSequence.contains("-(") || currentSequence.contains("-["))) {
+			m.put("source", getSequenceName(currentSequence) + "'");
+		}
+		// Check the target string
+		if(nextSequence.contains("+(") || nextSequence.contains("+[")) {
+			m.put("target", getSequenceName(nextSequence) + "'");
+		}
+		else if ((nextSequence.contains("-(") || nextSequence.contains("-["))) {
+			m.put("target", getSequenceName(nextSequence));
+		}
+		System.out.println(m.toString());
+		return m;
 	}
 }
