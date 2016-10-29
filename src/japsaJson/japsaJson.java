@@ -200,6 +200,7 @@ public class japsaJson {
 		List<Map<String, Object>> nodeMap = new ArrayList<Map<String, Object>>();
 		List<Map<String, Object>> linkMap = new ArrayList<Map<String, Object>>();
 		
+		// We use hash table to keep track of the number of duplicate nodes encountered for the suffix.
 		Map<String, Integer> nodeCount = new HashMap<String, Integer>();
 
 		// TODO: Clean up this block of code
@@ -236,11 +237,13 @@ public class japsaJson {
 				//System.out.println(currentSequence);
 
 				// Check for duplicate (repetitive) nodes
-				if (countDuplicateNodes(currentSequence, nodeCount, 1) != 0) {
-					currentSequence = currentSequence + "_" + 
-							countDuplicateNodes(currentSequence, nodeCount,0);	
-				}
+				updateNodeCount(currentSequence, nodeCount);
 				
+				// Append suffix to node name if duplicate.
+				// If nodeCount.get(currentSequence) returns 0, then up to this point it is unique
+				if (nodeCount.get(currentSequence) != 0) {
+					currentSequence = currentSequence + "_" + nodeCount.get(currentSequence);
+				}
 				
 				// Add to the node list
 				nm.put("id", currentSequence);
@@ -319,6 +322,11 @@ public class japsaJson {
 
 	} //End parse function.
 	
+	/**
+	 * 
+	 * @param s
+	 * @return
+	 */
 	public String getSequenceName(String s){
 		int nodeStartIndex = 0;
 		int nodeEndIndex = 0;
@@ -340,6 +348,11 @@ public class japsaJson {
 		return s;
 	}
 	
+	/**
+	 * 
+	 * @param s
+	 * @return
+	 */
 	public int getLength(String s) {
 		int lengthStartIndex = 0;
 		int lengthDelimitIndex = 0;
@@ -428,63 +441,53 @@ public class japsaJson {
 		return m;
 	}
 	
-	public String getOrientation (String s, String r) {
+	/**
+	 * Identifies the orientation of the nodes specified in the current header (source) 
+	 * and in the next node header (target).
+	 * @param currentHeader
+	 * @param nextHeader
+	 * @return (one of the following strings: "++" "+-" "--" "-+")
+	 */
+	public String getOrientation (String currentHeader, String nextHeader) {
 		String s0 = new String ("");
 		String s1 = new String ("");
-		System.out.println("Current Header: " + s);
-		System.out.println("Next HEader" + r);
-		if(s.contains("+(") || s.contains("+[")) {
+		System.out.println("Current Header: " + currentHeader);
+		System.out.println("Next HEader" + nextHeader);
+		
+		// Identify the orientation in the current node header (source)
+		if(currentHeader.contains("+(") || currentHeader.contains("+[")) {
 			s0 = "+";
 		}
-		else if ((s.contains("-(") || s.contains("-["))) {
+		else if ((currentHeader.contains("-(") || currentHeader.contains("-["))) {
 			s0 = "-";
 		}
-		// Check the target string
-		if(r.contains("+(") || r.contains("+[")) {
+		// Identify the orientation in the next node header (target)
+		if(nextHeader.contains("+(") || nextHeader.contains("+[")) {
 			s1 = "+";
 		}
-		else if ((r.contains("-(") || r.contains("-["))) {
+		else if ((nextHeader.contains("-(") || nextHeader.contains("-["))) {
 			s1 = "-";
 		}
 		return (s0 + s1);
 	}
 	
+
 	/**
-	 * 
-	 * Count from 0 (Zero-based numbering)
-	 * 
-	 * @param s
+	 * Updates the NodeCount hash table to keep track of duplicate nodes.
+	 * Counts from 0 (Zero-based numbering)
+	 * @param nodeName
 	 * @param nodeCount
-	 * @param flag
-	 * @return
 	 */
-	public int countDuplicateNodes(String s, Map<String, Integer> nodeCount, int flag) {
+	public void updateNodeCount(String nodeName, Map<String, Integer> nodeCount) {
 		// Check for duplicate (repetitive) nodes
-		int count = 0;
-		if (flag == 1) {
-			if(nodeCount.containsKey(s)) {
-				count = nodeCount.get(s);
-				count++;
-				nodeCount.put(s, count);
-				s = s + "_" + count;
-				System.out.println("Duplicated node" + s);
-			}
-			else {
-				nodeCount.put(s, 0); // Zero-based numbering.
-				count = 0;	// Redundant
-				System.out.println("Adding node: " + s);
-			}
-		} // End if
-		// Flag equals any number other than 1;
+		if(nodeCount.containsKey(nodeName)) {
+			nodeCount.put(nodeName, nodeCount.get(nodeName)+1); // Increment the value for the current node s
+			System.out.println("Duplicated node" + nodeName);
+		}
 		else {
-			if(nodeCount.containsKey(s)) {
-				count = nodeCount.get(s);
-			}
-			else {
-				count = 0;	// Redundant
-			}
-		} // End else
-		System.out.format("Count: %d\n", count);
-		return count;
+			nodeCount.put(nodeName, 0); // Zero-based numbering.
+			System.out.println("Adding node: " + nodeName);
+		}
+		System.out.format("Count: %d\n", nodeCount.get(nodeName));
 	}
 }
