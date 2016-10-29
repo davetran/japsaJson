@@ -15,8 +15,8 @@ import com.google.gson.GsonBuilder;
 
 /**
  * @author David Tran
- * @version 1.01
- * @since 09-OCT-2016
+ * @version 1.02
+ * @since 29-OCT-2016
  * 
  */
 public class japsaJson {
@@ -200,6 +200,8 @@ public class japsaJson {
 		List<Map<String, Object>> nodeMap = new ArrayList<Map<String, Object>>();
 		List<Map<String, Object>> linkMap = new ArrayList<Map<String, Object>>();
 		
+		Map<String, Integer> nodeCount = new HashMap<String, Integer>();
+
 		// TODO: Clean up this block of code
 		
 		// Debug
@@ -213,7 +215,7 @@ public class japsaJson {
 			Map<String, Object> nm = new HashMap<String, Object>();  //3' node id
 			Map<String, Object> nm2 = new HashMap<String, Object>(); //5' node id
 			Map<String, Object> lm = new HashMap<String, Object>();
-			
+						
 			String s = scaffoldList.get(i);
 			
 			// State-machine for linear or circular scaffolds.
@@ -225,12 +227,20 @@ public class japsaJson {
 					scaffoldType = 1;
 					circularStart = i + 1;	// Sequence index for the start of the circular scarf
 				}	
-			}
+			} //End state-machine code.
 
 			if(s.contains(">A") == false) {
 				//System.out.println(s);
 				currentSequence = getSequenceName(s);
+				System.out.println(currentSequence);
 				//System.out.println(currentSequence);
+
+				// Check for duplicate (repetitive) nodes
+				if (countDuplicateNodes(currentSequence, nodeCount, 1) != 0) {
+					currentSequence = currentSequence + "_" + 
+							countDuplicateNodes(currentSequence, nodeCount,0);	
+				}
+				
 				
 				// Add to the node list
 				nm.put("id", currentSequence);
@@ -238,6 +248,8 @@ public class japsaJson {
 				
 				nodeMap.add(nm);
 				nodeMap.add(nm2);
+				
+				//System.out.println(nodeMap.toString());
 				
 				// Parse and add the contig data
 				sequenceLength = getLength(s);
@@ -251,26 +263,34 @@ public class japsaJson {
 				
 				/*
 				 * ContigLinks code
-				 * Sequence orientation is not implemented. Will assume a forward to forward
-				 * adjacency.
-				 * 
-				 * TODO: Build the proper adjacencies based on sequence orientation
 				 */
+				String nextHeader = new String("");
+				String orientation = new String("");
+				
 				if (i < (scaffoldTotal - 1)) {
-					nextSequence = scaffoldList.get(i + 1);
-					if(nextSequence.contains(">A") == false) {
-						//System.out.println("NExt seq: " + getSequenceName(nextSequence));
-						//lm.put("source", getSequenceName(s));
-						//lm.put("target", getSequenceName(nextSequence) + "'");
-						//System.out.println(lm.toString());
-						lm = buildLinkMap(s, nextSequence);
+					nextHeader = scaffoldList.get(i + 1);
+					if(nextHeader.contains(">A") == false) {
+						nextSequence = getSequenceName(nextHeader);
+						System.out.println("NExt Sequence: " + nextSequence);
+						
+						// We look ahead into the next line and append count suffix if required
+						if (nodeCount.containsKey(nextSequence)) {
+							nextSequence = nextSequence + "_" + (nodeCount.get(nextSequence)+1);
+						}
+						System.out.println("Modified NExt Sequence: " + nextSequence);
+						
+						orientation = getOrientation(s,nextHeader);
+						System.out.println(orientation);
+						lm = buildLinkMap(currentSequence, nextSequence, orientation);
 						linkMap.add(lm);	// Add new entry for Json
 					}
 					else {
 						// If the scaffold type is circular, connect the last sequence
 			            // to the first.
 						if(scaffoldType == 1) {
-							lm = buildLinkMap(s, scaffoldList.get(circularStart));
+							nextSequence = getSequenceName(scaffoldList.get(circularStart));
+							orientation = getOrientation(s,scaffoldList.get(circularStart));
+							lm = buildLinkMap(currentSequence, nextSequence, orientation);
 							linkMap.add(lm);	// Add new entry for Json
 						}
 					}
@@ -388,23 +408,83 @@ public class japsaJson {
 	 * @param nextSequence
 	 * @return
 	 */
-	public Map<String, Object> buildLinkMap(String currentSequence, String nextSequence) {
+	public Map<String, Object> buildLinkMap(String currentSequence, String nextSequence, String orientation) {
 		Map<String, Object> m = new HashMap<String, Object>();
 		// Check the source string
-		if(currentSequence.contains("+(") || currentSequence.contains("+[")) {
-			m.put("source", getSequenceName(currentSequence));
+		if(orientation.charAt(0) == '+') {
+			m.put("source", currentSequence);
 		}
-		else if ((currentSequence.contains("-(") || currentSequence.contains("-["))) {
-			m.put("source", getSequenceName(currentSequence) + "'");
+		else if (orientation.charAt(0) == '-') {
+			m.put("source", currentSequence + "'");
 		}
 		// Check the target string
-		if(nextSequence.contains("+(") || nextSequence.contains("+[")) {
-			m.put("target", getSequenceName(nextSequence) + "'");
+		if(orientation.charAt(1) == '+') {
+			m.put("target", nextSequence + "'");
 		}
-		else if ((nextSequence.contains("-(") || nextSequence.contains("-["))) {
-			m.put("target", getSequenceName(nextSequence));
+		else if (orientation.charAt(1) == '-') {
+			m.put("target", nextSequence);
 		}
 		System.out.println(m.toString());
 		return m;
+	}
+	
+	public String getOrientation (String s, String r) {
+		String s0 = new String ("");
+		String s1 = new String ("");
+		System.out.println("Current Header: " + s);
+		System.out.println("Next HEader" + r);
+		if(s.contains("+(") || s.contains("+[")) {
+			s0 = "+";
+		}
+		else if ((s.contains("-(") || s.contains("-["))) {
+			s0 = "-";
+		}
+		// Check the target string
+		if(r.contains("+(") || r.contains("+[")) {
+			s1 = "+";
+		}
+		else if ((r.contains("-(") || r.contains("-["))) {
+			s1 = "-";
+		}
+		return (s0 + s1);
+	}
+	
+	/**
+	 * 
+	 * Count from 0 (Zero-based numbering)
+	 * 
+	 * @param s
+	 * @param nodeCount
+	 * @param flag
+	 * @return
+	 */
+	public int countDuplicateNodes(String s, Map<String, Integer> nodeCount, int flag) {
+		// Check for duplicate (repetitive) nodes
+		int count = 0;
+		if (flag == 1) {
+			if(nodeCount.containsKey(s)) {
+				count = nodeCount.get(s);
+				count++;
+				nodeCount.put(s, count);
+				s = s + "_" + count;
+				System.out.println("Duplicated node" + s);
+			}
+			else {
+				nodeCount.put(s, 0); // Zero-based numbering.
+				count = 0;	// Redundant
+				System.out.println("Adding node: " + s);
+			}
+		} // End if
+		// Flag equals any number other than 1;
+		else {
+			if(nodeCount.containsKey(s)) {
+				count = nodeCount.get(s);
+			}
+			else {
+				count = 0;	// Redundant
+			}
+		} // End else
+		System.out.format("Count: %d\n", count);
+		return count;
 	}
 }
