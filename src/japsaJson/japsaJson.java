@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -77,17 +78,31 @@ public class japsaJson {
                 		&& inputPath.toString().endsWith(".fin.japsa")) {
                 	System.out.println("Japsa Modified");
                 	
+//                	try {
+//                		// Try putting the thread to sleep to prevent the watcher
+//                		// from triggering multiple times in the event of a combined
+//                		// Create and modify event.
+//                		//Thread.sleep(1500);
+//                		System.out.println("Sleeping");
+//                		TimeUnit.SECONDS.sleep(3);
+//                		System.out.println("Awake");
+//                	}
+//                	catch (InterruptedException InterruptE) {
+//                		// Do nothing
+//                	}
+                	parse(child);
                 	try {
                 		// Try putting the thread to sleep to prevent the watcher
                 		// from triggering multiple times in the event of a combined
                 		// Create and modify event.
-                		Thread.sleep(1500);
+                		//Thread.sleep(1500);
                 		System.out.println("Sleeping");
+                		TimeUnit.SECONDS.sleep(15);
+                		System.out.println("Awake");
                 	}
                 	catch (InterruptedException InterruptE) {
                 		// Do nothing
                 	}
-                	parse(child);
                 }
             }
             // reset key and remove from set if directory no longer accessible
@@ -192,6 +207,7 @@ public class japsaJson {
 		int scaffoldType = 0; // Linear = 0, Circular = 0;
 		
 		int sequenceLength = 0;
+		double sequenceCoverage = 0;
 		int circularStart = 0;
 		String nextSequence = new String("");
 		String currentSequence = new String("");
@@ -258,9 +274,14 @@ public class japsaJson {
 				sequenceLength = getLength(s);
 				//System.out.println(sequenceLength);
 				
+				// Parse and add coverage data
+				sequenceCoverage = getCoverage(s);
+				System.out.println(sequenceCoverage);
+				
 				m.put("source", currentSequence);
 				m.put("target", currentSequence + "'");
 				m.put("length", sequenceLength);
+				m.put("coverage", sequenceCoverage);
 				
 				listMap.add(m);
 				
@@ -393,6 +414,47 @@ public class japsaJson {
 		}
 		return l;
 	}
+	
+	/**
+	 * 
+	 * @param s
+	 * @return
+	 */
+	public double getCoverage(String s) {
+		int covStartIndex = 0;
+		int covDelimitIndex = 0;
+		int covEndIndex = 0;
+		double coverage = 0;
+		
+		if(s.contains("NODE")) {	//Process the NODES
+			// Process coverage
+			covStartIndex = s.indexOf("_cov");
+			covEndIndex = s.indexOf("_ID_");
+			coverage = stringToDouble(s.substring(covStartIndex + 5, covEndIndex));
+			System.out.format("Coverage: %.2f%n", coverage);
+		}
+		else if (s.contains("_channel")){
+			coverage = 0.0;
+		}
+		return coverage;
+	}
+	
+	/**
+	 *  Helper for getCoverage()
+	 * @param s
+	 * @return
+	 */
+	public double stringToDouble(String s) {
+		double c = 0;
+		try {
+			c = Double.valueOf(s);
+		} 
+		catch (NumberFormatException e) {
+			c = 1;	// Edge of length zero should not exist.
+		}
+		return c;
+	}
+
 	
 	/**
 	 *
